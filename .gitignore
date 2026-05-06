@@ -11,3 +11,9 @@ ENV/
 .pytest_cache/
 .mypy_cache/
 *.db
+.dart_tool/
+.idea/
+*.iml
+my_awesome_pims.iml
+build/
+
