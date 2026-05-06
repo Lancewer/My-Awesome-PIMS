@@ -1,4 +1,5 @@
 import asyncio
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -11,6 +12,12 @@ config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# Override sqlalchemy.url from DATABASE_URL environment variable
+db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mynote:mynote@db:5432/mynote")
+if "asyncpg" in db_url:
+    db_url = db_url.replace("asyncpg", "psycopg2")
+config.set_main_option("sqlalchemy.url", db_url)
 
 from app.core.database import Base
 from app.models import Note, Tag, note_tags
