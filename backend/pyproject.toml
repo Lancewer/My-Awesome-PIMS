@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mynote"
-version = "0.1.0"
-description = "Self-hosted personal note system"
+name = "my-awesome-pims"
+version = "0.0.1"
+description = "Personal Information Management System"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
