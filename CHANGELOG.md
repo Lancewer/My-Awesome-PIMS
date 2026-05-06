@@ -1,8 +1,8 @@
 # Changelog
 
-All notable changes to MyNote will be documented in this file.
+All notable changes to My Awesome PIMS will be documented in this file.
 
-## [1.0.0.0] - 2026-05-06
+## [0.0.1.0] - 2026-05-06
 
 ### Added
 - FastAPI backend with full CRUD for notes (create, read, update, soft-delete)

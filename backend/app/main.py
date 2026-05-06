@@ -8,7 +8,7 @@ from app.schemas.tag import TagResponse
 from app.services.note_service import NoteService
 from app.services.tag_service import TagService
 
-app = FastAPI(title="MyNote API", version="0.1.0")
+app = FastAPI(title="My Awesome PIMS", version="0.0.1")
 
 
 @app.post("/api/v1/notes", response_model=NoteResponse, status_code=201)
