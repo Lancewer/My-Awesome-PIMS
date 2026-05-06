@@ -1,4 +1,5 @@
 #!/bin/bash
+export PYTHONPATH=/app:$PYTHONPATH
 echo "Running database migrations..."
 alembic upgrade head
 echo "Starting API server..."
