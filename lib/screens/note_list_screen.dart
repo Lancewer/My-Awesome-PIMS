@@ -59,16 +59,18 @@ class _NoteListScreenState extends State<NoteListScreen> {
         _hasMore = notes.length == _pageSize;
         _loading = false;
       });
-      // Scroll to bottom to show newest note
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
+      // Only scroll to bottom on initial load
+      if (_currentPage == 1 && _notes.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+      }
     } catch (e) {
       setState(() {
         _error = e is ApiException ? e.message : 'Failed to load notes';
@@ -79,6 +81,7 @@ class _NoteListScreenState extends State<NoteListScreen> {
 
   Future<void> _loadMore() async {
     if (_loadingMore || !_hasMore) return;
+    final previousOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
     setState(() => _loadingMore = true);
     try {
       final nextPage = _currentPage + 1;
@@ -89,6 +92,12 @@ class _NoteListScreenState extends State<NoteListScreen> {
         _currentPage = nextPage;
         _hasMore = notes.length == _pageSize;
         _loadingMore = false;
+      });
+      // Restore scroll position so the view stays where the user was reading
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.jumpTo(previousOffset);
+        }
       });
     } catch (e) {
       setState(() => _loadingMore = false);
@@ -248,77 +257,75 @@ class _NoteListScreenState extends State<NoteListScreen> {
           borderRadius: BorderRadius.circular(8),
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (isExpanded) ...[
-                  // Expanded: show full content
-                  Text(note.content, style: const TextStyle(fontSize: 14, height: 1.4, color: Color(0xFF212121))),
-                  if (note.tags.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Wrap(spacing: 4, runSpacing: 4, children: note.tags.map((tag) {
-                      final colors = TagColors.get(tag.name);
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(color: colors['bg'], borderRadius: BorderRadius.circular(10)),
-                        child: Text(tag.name, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: colors['fg'])),
-                      );
-                    }).toList()),
-                  ],
-                  const SizedBox(height: 6),
-                  Text(_formatTime(note.createdAt), style: const TextStyle(fontSize: 11, color: Color(0xFF9E9E9E)), textAlign: TextAlign.right),
-                  const SizedBox(height: 4),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text('Tap to collapse', style: const TextStyle(fontSize: 10, color: Color(0xFFBDBDBD), fontStyle: FontStyle.italic)),
-                  ),
-                ] else ...[
-                  // Collapsed: fixed height preview
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 80),
+            child: isExpanded
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(note.content, style: const TextStyle(fontSize: 14, height: 1.4, color: Color(0xFF212121))),
+                      if (note.tags.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Wrap(spacing: 4, runSpacing: 4, children: note.tags.map((tag) {
+                          final colors = TagColors.get(tag.name);
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(color: colors['bg'], borderRadius: BorderRadius.circular(10)),
+                            child: Text(tag.name, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: colors['fg'])),
+                          );
+                        }).toList()),
+                      ],
+                      const SizedBox(height: 6),
+                      Text(_formatTime(note.createdAt), style: const TextStyle(fontSize: 11, color: Color(0xFF9E9E9E)), textAlign: TextAlign.right),
+                      const SizedBox(height: 4),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text('Tap to collapse', style: const TextStyle(fontSize: 10, color: Color(0xFFBDBDBD), fontStyle: FontStyle.italic)),
+                      ),
+                    ],
+                  )
+                : SizedBox(
+                    height: 80,
                     child: Stack(
                       children: [
+                        // Content area
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(note.content, style: const TextStyle(fontSize: 14, height: 1.4, color: Color(0xFF212121)), maxLines: 4, overflow: TextOverflow.ellipsis),
+                            Expanded(
+                              child: Text(
+                                note.content,
+                                style: const TextStyle(fontSize: 14, height: 1.4, color: Color(0xFF212121)),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                             if (note.tags.isNotEmpty) ...[
-                              const SizedBox(height: 6),
-                              Wrap(spacing: 4, runSpacing: 4, children: note.tags.map((tag) {
+                              const SizedBox(height: 4),
+                              Wrap(spacing: 4, runSpacing: 2, children: note.tags.map((tag) {
                                 final colors = TagColors.get(tag.name);
                                 return Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(color: colors['bg'], borderRadius: BorderRadius.circular(10)),
-                                  child: Text(tag.name, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: colors['fg'])),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                  decoration: BoxDecoration(color: colors['bg'], borderRadius: BorderRadius.circular(8)),
+                                  child: Text(tag.name, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: colors['fg'])),
                                 );
                               }).toList()),
                             ],
-                            const SizedBox(height: 4),
-                            Text(_formatTime(note.createdAt), style: const TextStyle(fontSize: 11, color: Color(0xFF9E9E9E)), textAlign: TextAlign.right),
+                            const SizedBox(height: 2),
+                            Text(_formatTime(note.createdAt), style: const TextStyle(fontSize: 10, color: Color(0xFF9E9E9E))),
                           ],
                         ),
-                        // Edit icon in bottom-right corner
+                        // Edit icon fixed at bottom-right
                         Positioned(
                           bottom: 0,
                           right: 0,
                           child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
                             onTap: () => _onEditNote(note),
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(color: Colors.white.withAlpha(200), borderRadius: BorderRadius.circular(4)),
-                              child: const Icon(Icons.edit, size: 18, color: Color(0xFF1A73E8)),
-                            ),
+                            child: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF1A73E8)),
                           ),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ],
-            ),
           ),
         ),
       ),
