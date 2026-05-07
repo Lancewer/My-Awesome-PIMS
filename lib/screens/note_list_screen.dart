@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:my_awesome_pims/models/note.dart';
 import 'package:my_awesome_pims/services/note_api_service.dart';
-import 'package:my_awesome_pims/screens/note_detail_screen.dart';
+import 'package:my_awesome_pims/screens/compose_screen.dart';
 import 'package:my_awesome_pims/screens/search_screen.dart';
 import 'package:my_awesome_pims/widgets/tag_colors.dart';
 
@@ -16,6 +16,7 @@ class NoteListScreen extends StatefulWidget {
 class _NoteListScreenState extends State<NoteListScreen> {
   // Notes stored oldest-first. Newest notes are at the end of the list.
   List<Note> _notes = [];
+  String? _expandedNoteId; // Only one note can be expanded at a time
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
@@ -99,10 +100,26 @@ class _NoteListScreenState extends State<NoteListScreen> {
     }
   }
 
+  void _toggleExpand(String noteId) {
+    setState(() {
+      if (_expandedNoteId == noteId) {
+        // Tapping the already-expanded note collapses it
+        _expandedNoteId = null;
+      } else {
+        // Expand this note, automatically collapse any other
+        _expandedNoteId = noteId;
+      }
+    });
+  }
+
   void _onNoteTap(Note note) {
+    _toggleExpand(note.id);
+  }
+
+  void _onEditNote(Note note) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => NoteDetailScreen(apiService: widget.apiService, note: note)),
+      MaterialPageRoute(builder: (_) => ComposeScreen(apiService: widget.apiService, initialContent: note.content, noteId: note.id, isEdit: true)),
     ).then((_) => _loadNotes());
   }
 
@@ -219,28 +236,25 @@ class _NoteListScreenState extends State<NoteListScreen> {
   }
 
   Widget _buildNoteCard(Note note) {
+    final isExpanded = _expandedNoteId == note.id;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 80),
-        child: Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          child: InkWell(
-            onTap: () => _onNoteTap(note),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      note.content,
-                      style: const TextStyle(fontSize: 14, height: 1.4, color: Color(0xFF212121)),
-                    ),
-                  ),
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        child: InkWell(
+          onTap: () => _onNoteTap(note),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isExpanded) ...[
+                  // Expanded: show full content
+                  Text(note.content, style: const TextStyle(fontSize: 14, height: 1.4, color: Color(0xFF212121))),
                   if (note.tags.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Wrap(spacing: 4, runSpacing: 4, children: note.tags.map((tag) {
@@ -254,8 +268,56 @@ class _NoteListScreenState extends State<NoteListScreen> {
                   ],
                   const SizedBox(height: 6),
                   Text(_formatTime(note.createdAt), style: const TextStyle(fontSize: 11, color: Color(0xFF9E9E9E)), textAlign: TextAlign.right),
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('Tap to collapse', style: const TextStyle(fontSize: 10, color: Color(0xFFBDBDBD), fontStyle: FontStyle.italic)),
+                  ),
+                ] else ...[
+                  // Collapsed: fixed height preview
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 80),
+                    child: Stack(
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(note.content, style: const TextStyle(fontSize: 14, height: 1.4, color: Color(0xFF212121)), maxLines: 4, overflow: TextOverflow.ellipsis),
+                            if (note.tags.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Wrap(spacing: 4, runSpacing: 4, children: note.tags.map((tag) {
+                                final colors = TagColors.get(tag.name);
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(color: colors['bg'], borderRadius: BorderRadius.circular(10)),
+                                  child: Text(tag.name, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: colors['fg'])),
+                                );
+                              }).toList()),
+                            ],
+                            const SizedBox(height: 4),
+                            Text(_formatTime(note.createdAt), style: const TextStyle(fontSize: 11, color: Color(0xFF9E9E9E)), textAlign: TextAlign.right),
+                          ],
+                        ),
+                        // Edit icon in bottom-right corner
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _onEditNote(note),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(color: Colors.white.withAlpha(200), borderRadius: BorderRadius.circular(4)),
+                              child: const Icon(Icons.edit, size: 18, color: Color(0xFF1A73E8)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
-              ),
+              ],
             ),
           ),
         ),

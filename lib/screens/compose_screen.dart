@@ -4,8 +4,9 @@ import 'package:my_awesome_pims/services/note_api_service.dart';
 class ComposeScreen extends StatefulWidget {
   final NoteApiService apiService;
   final String? initialContent;
+  final String? noteId;
   final bool isEdit;
-  const ComposeScreen({super.key, required this.apiService, this.initialContent, this.isEdit = false});
+  const ComposeScreen({super.key, required this.apiService, this.initialContent, this.noteId, this.isEdit = false});
 
   @override
   State<ComposeScreen> createState() => _ComposeScreenState();
@@ -35,7 +36,11 @@ class _ComposeScreenState extends State<ComposeScreen> {
 
     setState(() => _saving = true);
     try {
-      await widget.apiService.createNote(content);
+      if (widget.isEdit && widget.noteId != null) {
+        await widget.apiService.updateNote(widget.noteId!, content);
+      } else {
+        await widget.apiService.createNote(content);
+      }
       if (mounted) Navigator.pop(context);
     } catch (e) {
       setState(() => _saving = false);

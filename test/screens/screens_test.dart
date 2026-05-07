@@ -97,9 +97,9 @@ void main() {
   group('ComposeScreen', () {
     testWidgets('shows compose screen with text field', (tester) async {
       final service = MockApiService();
-      await tester.pumpWidget(_wrap(ComposeScreen(apiService: service)));
+      await tester.pumpWidget(_wrap(ComposeScreen(apiService: service, initialContent: 'existing', noteId: '1', isEdit: true)));
       await tester.pumpAndSettle();
-      expect(find.text('New Note'), findsOneWidget);
+      expect(find.text('Edit Note'), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
     });
 
