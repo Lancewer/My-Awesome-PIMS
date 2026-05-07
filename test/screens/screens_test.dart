@@ -81,13 +81,16 @@ void main() {
       expect(find.text('Retry'), findsOneWidget);
     });
 
-    testWidgets('tapping + opens compose', (tester) async {
+    testWidgets('tapping + shows inline compose card', (tester) async {
       final service = MockApiService(mockNotes: []);
       await tester.pumpWidget(_wrap(NoteListScreen(apiService: service)));
       await tester.pumpAndSettle();
+      expect(find.text('Tap + to capture your first thought'), findsOneWidget);
       await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
-      expect(find.text('New Note'), findsOneWidget);
+      expect(find.text('Type your note...'), findsOneWidget);
+      expect(find.byIcon(Icons.check), findsOneWidget);
+      expect(find.byIcon(Icons.close), findsOneWidget);
     });
   });
 

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:my_awesome_pims/models/note.dart';
 import 'package:my_awesome_pims/services/note_api_service.dart';
-import 'package:my_awesome_pims/screens/compose_screen.dart';
 import 'package:my_awesome_pims/screens/note_detail_screen.dart';
 import 'package:my_awesome_pims/screens/search_screen.dart';
 import 'package:my_awesome_pims/widgets/tag_colors.dart';
@@ -15,6 +14,7 @@ class NoteListScreen extends StatefulWidget {
 }
 
 class _NoteListScreenState extends State<NoteListScreen> {
+  // Notes stored oldest-first. Newest notes are at the end of the list.
   List<Note> _notes = [];
   bool _loading = true;
   bool _loadingMore = false;
@@ -23,10 +23,25 @@ class _NoteListScreenState extends State<NoteListScreen> {
   int _currentPage = 1;
   static const int _pageSize = 20;
 
+  // Inline compose state
+  bool _adding = false;
+  final _composeController = TextEditingController();
+  final _composeFocus = FocusNode();
+  bool _saving = false;
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
     _loadNotes();
+  }
+
+  @override
+  void dispose() {
+    _composeController.dispose();
+    _composeFocus.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadNotes() async {
@@ -37,10 +52,21 @@ class _NoteListScreenState extends State<NoteListScreen> {
     try {
       final notes = await widget.apiService.fetchNotes(page: 1, pageSize: _pageSize);
       setState(() {
-        _notes = notes;
+        // API returns newest-first. Reverse so oldest is at top, newest at bottom.
+        _notes = notes.reversed.toList();
         _currentPage = 1;
         _hasMore = notes.length == _pageSize;
         _loading = false;
+      });
+      // Scroll to bottom to show newest note
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
       });
     } catch (e) {
       setState(() {
@@ -57,7 +83,8 @@ class _NoteListScreenState extends State<NoteListScreen> {
       final nextPage = _currentPage + 1;
       final notes = await widget.apiService.fetchNotes(page: nextPage, pageSize: _pageSize);
       setState(() {
-        _notes.insertAll(0, notes);
+        // Prepend older notes to the top of the list
+        _notes.insertAll(0, notes.reversed);
         _currentPage = nextPage;
         _hasMore = notes.length == _pageSize;
         _loadingMore = false;
@@ -79,11 +106,55 @@ class _NoteListScreenState extends State<NoteListScreen> {
     ).then((_) => _loadNotes());
   }
 
-  void _onSave() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => ComposeScreen(apiService: widget.apiService)),
-    ).then((_) => _loadNotes());
+  void _onAddPressed() {
+    setState(() => _adding = true);
+    _composeController.clear();
+    // Scroll to bottom after frame renders
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+        _composeFocus.requestFocus();
+      }
+    });
+  }
+
+  Future<void> _saveNewNote() async {
+    final content = _composeController.text.trim();
+    if (content.isEmpty) {
+      setState(() => _adding = false);
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final note = await widget.apiService.createNote(content);
+      setState(() {
+        _notes.add(note);
+        _adding = false;
+        _saving = false;
+      });
+      _composeController.clear();
+      // Scroll to new note
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    } catch (e) {
+      setState(() => _saving = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save: ${e is ApiException ? e.message : e.toString()}')),
+        );
+      }
+    }
   }
 
   void _onSearch() {
@@ -106,7 +177,7 @@ class _NoteListScreenState extends State<NoteListScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? _buildErrorState()
-              : _notes.isEmpty
+              : _notes.isEmpty && !_adding
                   ? _buildEmptyState()
                   : NotificationListener<ScrollNotification>(
                       onNotification: (notification) {
@@ -120,65 +191,121 @@ class _NoteListScreenState extends State<NoteListScreen> {
                       child: RefreshIndicator(
                         onRefresh: _loadNotes,
                         child: ListView.builder(
+                          controller: _scrollController,
                           padding: const EdgeInsets.only(bottom: 80),
-                          itemCount: _notes.length + (_loadingMore ? 1 : 0) + (_hasMore && _currentPage > 1 ? 1 : 0),
+                          itemCount: _notes.length + (_loadingMore ? 1 : 0) + (_adding ? 1 : 0),
                           itemBuilder: (context, index) {
-                            if (index == 0 && _hasMore && _currentPage > 1) {
-                              return const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 16),
-                                child: Center(child: Text('No more notes', style: TextStyle(color: Color(0xFF9E9E9E), fontSize: 12))),
-                              );
+                            if (index < _notes.length) {
+                              return _buildNoteCard(_notes[index]);
                             }
-                            final noteIndex = index - (_hasMore && _currentPage > 1 ? 1 : 0);
-                            if (_loadingMore && noteIndex == _notes.length) {
+                            if (_loadingMore) {
                               return const Padding(
                                 padding: EdgeInsets.all(16),
                                 child: Center(child: CircularProgressIndicator()),
                               );
                             }
-                            return _buildNoteCard(_notes[noteIndex]);
+                            return _buildComposeCard();
                           },
                         ),
                       ),
                     ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _onSave,
-        child: const Icon(Icons.add),
+        onPressed: _adding ? null : _onAddPressed,
+        child: _saving
+            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.add),
       ),
     );
   }
 
   Widget _buildNoteCard(Note note) {
-    final snippet = note.content.length > 120 ? '${note.content.substring(0, 120)}...' : note.content;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 80),
+        child: Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          child: InkWell(
+            onTap: () => _onNoteTap(note),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      note.content,
+                      style: const TextStyle(fontSize: 14, height: 1.4, color: Color(0xFF212121)),
+                    ),
+                  ),
+                  if (note.tags.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 4, runSpacing: 4, children: note.tags.map((tag) {
+                      final colors = TagColors.get(tag.name);
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(color: colors['bg'], borderRadius: BorderRadius.circular(10)),
+                        child: Text(tag.name, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: colors['fg'])),
+                      );
+                    }).toList()),
+                  ],
+                  const SizedBox(height: 6),
+                  Text(_formatTime(note.createdAt), style: const TextStyle(fontSize: 11, color: Color(0xFF9E9E9E)), textAlign: TextAlign.right),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildComposeCard() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Card(
         elevation: 2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        child: InkWell(
-          onTap: () => _onNoteTap(note),
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(snippet, style: const TextStyle(fontSize: 14, height: 1.4, color: Color(0xFF212121)), maxLines: 2, overflow: TextOverflow.ellipsis),
-                if (note.tags.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Wrap(spacing: 4, runSpacing: 4, children: note.tags.map((tag) {
-                    final colors = TagColors.get(tag.name);
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(color: colors['bg'], borderRadius: BorderRadius.circular(10)),
-                      child: Text(tag.name, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: colors['fg'])),
-                    );
-                  }).toList()),
-                ],
-                const SizedBox(height: 6),
-                Text(_formatTime(note.createdAt), style: const TextStyle(fontSize: 11, color: Color(0xFF9E9E9E)), textAlign: TextAlign.right),
-              ],
-            ),
+        color: const Color(0xFFF5F5F5),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _composeController,
+                  focusNode: _composeFocus,
+                  maxLines: null,
+                  minLines: 2,
+                  style: const TextStyle(fontSize: 14),
+                  decoration: const InputDecoration(
+                    hintText: "Type your note...",
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  onSubmitted: (_) => _saveNewNote(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.check, color: Color(0xFF1A73E8)),
+                onPressed: _saving ? null : _saveNewNote,
+                iconSize: 28,
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Color(0xFF9E9E9E)),
+                onPressed: _saving ? null : () {
+                  setState(() => _adding = false);
+                  _composeController.clear();
+                  FocusScope.of(context).unfocus();
+                },
+                iconSize: 28,
+              ),
+            ],
           ),
         ),
       ),
