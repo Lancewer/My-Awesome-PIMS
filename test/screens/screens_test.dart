@@ -81,22 +81,25 @@ void main() {
       expect(find.text('Retry'), findsOneWidget);
     });
 
-    testWidgets('tapping + opens compose', (tester) async {
+    testWidgets('tapping + shows inline compose card', (tester) async {
       final service = MockApiService(mockNotes: []);
       await tester.pumpWidget(_wrap(NoteListScreen(apiService: service)));
       await tester.pumpAndSettle();
+      expect(find.text('Tap + to capture your first thought'), findsOneWidget);
       await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
-      expect(find.text('New Note'), findsOneWidget);
+      expect(find.text('Type your note...'), findsOneWidget);
+      expect(find.byIcon(Icons.check), findsOneWidget);
+      expect(find.byIcon(Icons.close), findsOneWidget);
     });
   });
 
   group('ComposeScreen', () {
     testWidgets('shows compose screen with text field', (tester) async {
       final service = MockApiService();
-      await tester.pumpWidget(_wrap(ComposeScreen(apiService: service)));
+      await tester.pumpWidget(_wrap(ComposeScreen(apiService: service, initialContent: 'existing', noteId: '1', isEdit: true)));
       await tester.pumpAndSettle();
-      expect(find.text('New Note'), findsOneWidget);
+      expect(find.text('Edit Note'), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
     });
 

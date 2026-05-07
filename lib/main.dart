@@ -4,7 +4,7 @@ import 'package:my_awesome_pims/services/note_api_service.dart';
 import 'package:my_awesome_pims/screens/note_list_screen.dart';
 
 // TODO: Change this to your backend IP address on the same WiFi/LAN
-const String backendUrl = 'http://192.168.1.100:8000';
+const String backendUrl = 'http://192.168.3.19:7777';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
